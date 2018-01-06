@@ -31,20 +31,21 @@ def fmt(string):
     exclude = ['.', ':', ';', '!', ',', '?', '"']
     return ''.join(ch for ch in string if ch not in exclude).lower().replace('\n', ' ').strip()
 
-video_url = 'https://www.youtube.com/watch?v=Slpz0D35oRI'
-phrase = 'grow'
+
+video_url = 'https://www.youtube.com/watch?v=n5uujMb_hbo'
+phrase = 'bellybutton'
 
 phrase = fmt(phrase)
-video_id = video_url[video_url.find('=')+1:]
+video_id = video_url[video_url.find('=') + 1:]
 vid_extension = 'mp4'
 video_name = video_id + '.' + vid_extension
-subs_name = video_id+'.en.vtt'
+subs_name = video_id + '.en.vtt'
 output_name = "output.mp4"
 
 # Downloads the video and subtitles
 print 'Downloading video...'
 ydl_opts = {'writesubtitles': True,
-            'outtmpl': video_id+'.%(ext)s',
+            'outtmpl': video_id + '.%(ext)s',
             'format_spec': vid_extension,
             'format': vid_extension,
             'logger': Logger()}
@@ -79,7 +80,9 @@ for line in subs_str:
         # Assigns the given start,end time as the current key to add the following lines to in the dict
         key = (start_time, end_time)
         subs[(start_time, end_time)] = ''
-    elif line != '\\n':
+
+    # If the line has dialogue
+    elif line != '\\n' and not line[0] in ['*', '[', '(']:
         subs[key] += line
 
 # Formats all of the lines to remove noise
@@ -88,42 +91,56 @@ for key, val in subs.items():
 
 pprint.pprint(subs)
 
-# Creates an array of how often the phrase occurs in a given time span
+# Creates an array of where the phrase occurs
 instances = []
 for time, line in subs.items():
     # Gets the indices of occurrences
     indices = []
     for i in range(len(line) - len(phrase) + 1):
-        if line[i:i+len(phrase)] == phrase:
+        if line[i:i + len(phrase)] == phrase:
             indices += [i]
 
     # A rough heuristic to pin down how far into the phrase is said
     for i in indices:
         # The percentage of how far in the line the phrase occurs in
-        pos = round(i / float(len(line)), 1)
+        pos = i / float(len(line))
 
         # The timestamp the phrase should occur at
         start, end = time
         time_pos = start + (end - start) * pos
-        instances.append(time_pos)
+        instances.append(round(time_pos, 1))
 
-# Sorts from smallest to biggest
+# Adds the start and end times of the video to create a complete range of how the video speeds up (examine for-loop)
+instances += [0, duration]
+
+# Sorts from first to last
 instances.sort()
 
 print instances
 
-# Conjoins and speeds the clips
+if len(instances) == 0:
+    print 'The phrase did not occur'
+    quit(2)
+
 # https://zulko.github.io/moviepy/getting_started/compositing.html
-speed_multiplier = 1.33
+speed_multiplier = 1.1  # An error may occur if this goes over 1.25
 clip_arr = []
 phrase_count = 0  # Number of times the phrase has been said so far
 clip = VideoFileClip(video_name)
 
-for time_span, num_occur in instances:
-    start, end = time_span
-    phrase_count += num_occur
-    clip_arr.append(clip.subclip(start, end).speedx(factor=speed_multiplier ** phrase_count))
+# Conjoins and speeds the clips
+for i in range(len(instances) - 1):
+    start, end = instances[i], instances[i + 1]
+    clip_arr.append(clip.subclip(start, end).speedx(factor=speed_multiplier ** i))
 
 # Combines and writes the video
 final_clip = concatenate_videoclips(clip_arr)
 final_clip.write_videofile(output_name, preset='superfast')
+
+ans = raw_input('Would you like to delete the original files? (y/n)')
+if ans == 'y':
+    try:
+        os.remove(video_name)
+        os.remove(subs_name)
+    except Exception as e:
+        print e
