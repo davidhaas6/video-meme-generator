@@ -1,4 +1,4 @@
 output.mp4
-video.en.vtt
-video.mp4
+*.en.vtt
+*.mp4
 temp
